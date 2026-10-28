@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Credit Card Discount Tier Predictor</title>
+<style>
+  :root { --bg:#f5f6fa; --card:#fff; --text:#1f2430; --muted:#6b7280; --accent:#2563eb; --border:#e5e7eb;
+          --low:#d97706; --medium:#2563eb; --high:#16a34a; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#12151c; --card:#1b1f2a; --text:#e8eaf0; --muted:#9aa3b2; --accent:#60a5fa; --border:#2a3040;
+            --low:#fbbf24; --medium:#60a5fa; --high:#4ade80; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); }
+  main { max-width: 900px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  p.sub { color: var(--muted); margin: 0 0 20px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px; margin-bottom:16px; }
+  label { display:block; font-size:.85rem; color:var(--muted); margin:12px 0 4px; }
+  select, input { width:100%; padding:10px; border:1px solid var(--border); border-radius:8px;
+                  background:var(--bg); color:var(--text); font-size:1rem; }
+  .row { display:flex; gap:10px; margin-top:18px; flex-wrap:wrap; }
+  button { padding:10px 16px; border-radius:8px; border:1px solid var(--accent); cursor:pointer; font-size:.95rem; }
+  button.primary { background:var(--accent); color:#fff; }
+  button.secondary { background:transparent; color:var(--accent); }
+  #result { display:none; text-align:center; }
+  #result .label { font-size:2rem; font-weight:700; margin:6px 0; }
+  .Low { color: var(--low); } .Medium { color: var(--medium); } .High { color: var(--high); }
+  .muted { color: var(--muted); font-size:.9rem; }
+  table { width:100%; border-collapse:collapse; font-size:.9rem; }
+  th, td { text-align:left; padding:8px; border-bottom:1px solid var(--border); }
+  .error { color:#dc2626; margin-top:12px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Credit Card Discount Tier Predictor</h1>
+  <p class="sub">Sri Lankan credit card offers: enter the offer details and the model predicts whether the discount is Low, Medium or High.</p>
+
+  <div class="card">
+    <label for="bank">Bank</label>
+    <select id="bank"></select>
+
+    <label for="tier">Card Tier</label>
+    <select id="tier"></select>
+
+    <label for="merchant">Merchant</label>
+    <input id="merchant" list="merchantList" placeholder="e.g. Keells">
+    <datalist id="merchantList"></datalist>
+
+    <label for="network">Card Network</label>
+    <select id="network"></select>
+
+    <label for="category">Category</label>
+    <select id="category"></select>
+
+    <div class="row">
+      <button class="primary" id="predictBtn">Predict Discount Tier</button>
+      <button class="secondary" id="holdoutBtn">Load reserved demo sample</button>
+    </div>
+    <div id="error" class="error" role="alert"></div>
+  </div>
+
+  <div class="card" id="result" aria-live="polite">
+    <div class="muted">Predicted Discount Tier</div>
+    <div class="label" id="prediction"></div>
+    <div class="muted" id="meta"></div>
+    <div class="muted" id="actual" style="margin-top:8px"></div>
+    <div class="muted" id="unseen" style="margin-top:8px"></div>
+    <table id="probs" style="margin-top:14px"></table>
+    <table id="allModels" style="margin-top:14px"></table>
+  </div>
+
+  <div class="card">
+    <strong>Model comparison — selected by validation macro F1</strong>
+    <p id="datasetStatus" class="muted"></p>
+    <div style="overflow-x:auto"><table id="metrics" style="margin-top:10px"></table></div>
+    <p class="muted">Low: 10% or less | Medium: above 10%, up to 20% | High: above 20%</p>
+  </div>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  let actualInfo = null; // Set only for the reserved demo sample.
+
+  function fillSelect(el, items) {
+    el.innerHTML = "";
+    el.add(new Option("-- unknown --", ""));
+    items.forEach(v => el.add(new Option(v, v)));
+  }
+
+  function row(cells, tag = "td") {
+    const tr = document.createElement("tr");
+    cells.forEach(c => { const e = document.createElement(tag); e.textContent = c; tr.appendChild(e); });
+    return tr;
+  }
+
+  async function api(url, options) {
+    const response = await fetch(url, options);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Request failed.");
+    return data;
+  }
+
+  async function init() {
+    try {
+      const opts = await api("/options");
+      fillSelect($("bank"), opts.banks);
+      fillSelect($("tier"), opts.tiers);
+      fillSelect($("category"), opts.categories);
+      fillSelect($("network"), opts.networks);
+      opts.merchants.forEach(m => { const o = document.createElement("option"); o.value = m; $("merchantList").appendChild(o); });
+
+      const m = await api("/metrics");
+      $("datasetStatus").textContent = `${m.dataset_rows} source-linked candidate rows. Full eligibility and conditions are not verified for every offer. Probabilities are model estimates.`;
+      const t = $("metrics");
+      t.appendChild(row(["Model", "Validation macro F1", "Test accuracy", "Test weighted F1", "Test macro F1"], "th"));
+      m.metrics.forEach(r => t.appendChild(row([
+        r.model + (r.model === m.best ? "  (best)" : ""), ...[r.validation_f1_macro, r.accuracy, r.f1_weighted, r.f1_macro].map(v => Number(v).toFixed(4))])));
+    } catch (e) {
+      $("error").textContent = e.message || "Could not reach the backend.";
+    }
+  }
+
+  $("holdoutBtn").onclick = async () => {
+    $("error").textContent = "";
+    try {
+      const h = await api("/holdout");
+      for (const [id, value] of Object.entries({
+        bank: h.bank, tier: h.tier, category: h.category, network: h.network
+      })) {
+        const select = $(id);
+        if (value && !Array.from(select.options).some(option => option.value === value)) {
+          select.add(new Option(value, value));
+        }
+        select.value = value || "";
+      }
+      $("merchant").value = h.merchant;
+      actualInfo = { tier: h.actual_tier, discount: h.actual_discount };
+      $("result").style.display = "none";
+    } catch (e) {
+      $("error").textContent = e.message;
+    }
+  };
+
+  ["bank", "tier", "merchant", "category", "network"].forEach(id => $(id).addEventListener("input", () => {
+    actualInfo = null;
+    $("result").style.display = "none";
+    $("actual").textContent = "";
+    $("unseen").textContent = "";
+  }));
+
+  $("predictBtn").onclick = async () => {
+    $("error").textContent = "";
+    $("result").style.display = "none";
+    $("predictBtn").disabled = true;
+    const payload = {
+      bank: $("bank").value, tier: $("tier").value,
+      merchant: $("merchant").value, category: $("category").value,
+      network: $("network").value,
+    };
+    try {
+      const data = await api("/predict", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      $("result").style.display = "block";
+      const p = $("prediction");
+      p.textContent = data.prediction;
+      p.className = "label " + data.prediction;
+      $("meta").textContent = `Model: ${data.model} | Predicted probability: ${(data.confidence * 100).toFixed(1)}%`;
+      $("unseen").textContent = data.unseen_features.length
+        ? "Inputs not observed during training: " + data.unseen_features.join(", ")
+        : "";
+      $("actual").textContent = actualInfo
+        ? `Reserved demo actual: ${actualInfo.tier} (${actualInfo.discount}% discount) - ${actualInfo.tier === data.prediction ? "correct" : "incorrect"}`
+        : "";
+
+      const pt = $("probs");
+      pt.innerHTML = "";
+      pt.appendChild(row(["Tier", "Probability"], "th"));
+      ["Low", "Medium", "High"].forEach(k => pt.appendChild(row([k, ((data.probabilities[k] || 0) * 100).toFixed(1) + "%"])));
+
+      const t = $("allModels");
+      t.innerHTML = "";
+      t.appendChild(row(["Model", "Prediction"], "th"));
+      Object.entries(data.all_models).forEach(([k, v]) => t.appendChild(row([k, v])));
+    } catch (e) {
+      $("error").textContent = e.message || "Request failed.";
+    } finally {
+      $("predictBtn").disabled = false;
+    }
+  };
+
+  init();
+</script>
+</body>
+</html>

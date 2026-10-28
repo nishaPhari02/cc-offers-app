@@ -1,0 +1,91 @@
+{
+  "pipeline_version": "clean-grouped-v1",
+  "dataset_sha256": "8da90f72656c50c003e038e6e0e0b21fa1096c6d2c8cfbda71f77c9c188fdd29",
+  "training_code_sha256": "5b7b5b3b6ecb1cea231a0426a275e7e74b173e186ec859dfd8fd7b4902ff54b6",
+  "generated_at_utc": "2026-10-28T07:00:29.638743+00:00",
+  "versions": {
+    "python": "3.12.14",
+    "scikit-learn": "1.6.1",
+    "numpy": "2.1.3",
+    "pandas": "2.2.3",
+    "joblib": "1.6.0",
+    "flask": "3.1.3",
+    "matplotlib": "3.10.0",
+    "shap": "0.54.1",
+    "lime": "0.2.0.1"
+  },
+  "dataset_rows": 257,
+  "features": [
+    "Bank",
+    "Card Tier",
+    "Merchant",
+    "Category",
+    "Card Network"
+  ],
+  "labels": [
+    "Low",
+    "Medium",
+    "High"
+  ],
+  "class_counts": {
+    "Low": 24,
+    "Medium": 139,
+    "High": 94
+  },
+  "partition_counts": {
+    "training": 179,
+    "testing": 43,
+    "validation": 34,
+    "demo": 1
+  },
+  "class_counts_by_partition": {
+    "training": {
+      "Low": 18,
+      "Medium": 96,
+      "High": 65
+    },
+    "validation": {
+      "Low": 3,
+      "Medium": 18,
+      "High": 13
+    },
+    "testing": {
+      "Low": 3,
+      "Medium": 24,
+      "High": 16
+    }
+  },
+  "selection_metric": "validation_f1_macro",
+  "best": "Extra Trees",
+  "tuning": {
+    "Random Forest": {
+      "best_parameters": {
+        "clf__max_depth": null,
+        "clf__max_features": "sqrt",
+        "clf__min_samples_leaf": 3
+      },
+      "cv_macro_f1": 0.38717851139885423,
+      "cv_folds": 3
+    },
+    "Extra Trees": {
+      "best_parameters": {
+        "clf__max_depth": 10,
+        "clf__max_features": 1.0,
+        "clf__min_samples_leaf": 1
+      },
+      "cv_macro_f1": 0.3938262847068443,
+      "cv_folds": 3
+    }
+  },
+  "fixed_n_estimators": 300,
+  "seed": 42,
+  "dataset_status": "Source-linked collection draft; full eligibility/conditions not verified for every row",
+  "evaluation_status": "Development evaluation; test results were already inspected in the supplied run",
+  "limitations": [
+    "Few Low test examples; per-class estimates are unstable.",
+    "Suggested groups require campaign-level review.",
+    "Ordinal encoding imposes an arbitrary order on nominal categories.",
+    "SHAP and LIME describe the model, not causal effects.",
+    "LIME perturbations can include implausible merchant/category combinations."
+  ]
+}
